@@ -1,0 +1,118 @@
+pragma solidity 0.4.20;
+// WIP
+contract Owned{
+    address owner;
+    
+    function Owned() public {
+        owner = msg.sender;
+    }
+    
+    modifier OnlyOwner{
+        require(msg.sender == owner);
+        _;
+    }
+    
+    function kill(address to) public OnlyOwner{
+        selfdestruct(to);
+    }
+}
+
+
+library SafeMath {
+    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
+        if (a == 0) {
+            return 0;
+        }
+        uint256 c = a * b;
+        assert(c / a == b);
+        return c;
+    }
+    
+    function div(uint256 a, uint256 b) internal pure returns (uint256) {
+        assert(b > 0);
+        uint256 c = a / b;
+        assert(a == b * c + a % b); 
+        return c;
+  }
+    
+    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
+        assert(b <= a);
+        return a - b;
+    }
+    
+    function add(uint256 a, uint256 b) internal pure returns (uint256) {
+        uint256 c = a + b;
+        assert(c >= a);
+        return c;
+    }
+}
+
+
+library MemberActions {
+    struct Member {
+        uint256 totalDonations;
+        uint256 lastDonationTimeStamp;
+        uint256 lastDonationAmount;
+        bool isMember;
+        bool voted;
+    }
+    
+    
+}
+
+
+contract Members is Owned {
+    using MemberActions for MemberActions.Member;
+    using SafeMath for uint256;
+    
+    mapping(address => MemberActions.Member) members;
+    uint256 allMembers;
+    uint256 votedMembers;
+    bool voting = false;
+    
+    function Members() public {
+        members[owner].isMember = true;
+        allMembers++;
+    }
+    
+    modifier IsMember() {
+        require(members[msg.sender].isMember == true);
+        _;
+    }
+    
+    modifier CanVote() {
+        require(members[msg.sender].voted == false);
+        _;
+    }
+    
+    modifier CanCallVote() {
+        require(!voting);
+        _;
+    }
+
+    function addMember(address _address) public IsMember CanCallVote {
+        voting = true;
+        uint256 votingStarted = now;
+        vote();
+        members[msg.sender].voted = true;
+        votedMembers++;
+        
+        if(votedMembers > allMembers.div(2)){
+            members[_address].isMember = true;
+            allMembers++;
+        }
+        
+        if(now > votingStarted + 2 minutes){
+            voting = false;
+        }
+    }
+    
+    function vote() public {
+        require(voting);
+        members[msg.sender].voted = true;
+        votedMembers++;
+    }
+    
+    // WIP
+    
+}
