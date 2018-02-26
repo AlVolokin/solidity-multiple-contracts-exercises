@@ -1,0 +1,53 @@
+pragma solidity 0.4.20;
+
+contract Owned{
+    address owner;
+    
+    function Owned() public {
+        owner = msg.sender;
+    }
+    
+    modifier OnlyOwner{
+        require(msg.sender == owner);
+        _;
+    }
+    
+    function transferOwnership(address to) public OnlyOwner{
+        owner = to;
+    }
+}
+
+
+library SafeMath {
+    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
+        if (a == 0) {
+            return 0;
+        }
+        uint256 c = a * b;
+        assert(c / a == b);
+        return c;
+    }
+        
+    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
+        assert(b <= a);
+        return a - b;
+    }
+    
+    function add(uint256 a, uint256 b) internal pure returns (uint256) {
+        uint256 c = a + b;
+        assert(c >= a);
+        return c;
+    }
+}
+
+contract CounterUsing is Owned {
+    using SafeMath for uint256;
+    uint256 state;
+    uint256 lastChange = now;
+    
+    function changeState() public {
+        state.add(now % 256);
+        state.mul(now.sub(lastChange));
+        state.sub(block.gaslimit);
+    }
+}
