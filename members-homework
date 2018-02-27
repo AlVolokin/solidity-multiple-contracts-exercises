@@ -1,4 +1,4 @@
-pragma solidity 0.4.20;
+pragma solidity ^0.4.20;
 
 contract Owned{
     address owner;
@@ -25,7 +25,7 @@ library SafeMath {
         assert(a == b * c + a % b); 
         return c;
     }
-        
+    
     function add(uint256 a, uint256 b) internal pure returns (uint256) {
         uint256 c = a + b;
         assert(c >= a);
@@ -81,14 +81,15 @@ contract Members is Owned {
     using MemberActions for MemberActions.MemberData;
     using MemberActions for MemberActions.MembersData;
     using SafeMath for uint256;
-    
+    // When vote on new member is called, it triggers an event, which allows the other members to be notified about it.
     event VoteCalledOn(address _address, uint256 _timeStamp);
     
     MemberActions.MembersData members;
     uint256 allMembers;
     uint256 votedMembers;
     bool voteInProgress = false;
-    
+    address voteCaller;
+    // In the constructor the owner is set as the first member. 
     function Members() public {
         members.addMember(owner);
         allMembers++;
@@ -108,26 +109,20 @@ contract Members is Owned {
         require(!voteInProgress);
         _;
     }
-
+    
+    modifier CanStopVote() {
+        require(voteCaller == msg.sender);
+        _;
+    }
+    // Only a member (provided that there is no vote in progress already) can call a vote on a new one and it is considered automatically for a vote in favor of the proposal.
     function callVoteForNewMember(address _address) public IsMember CanCallVote {
+        voteCaller = msg.sender;
         voteInProgress = true;
-        uint256 votingStarted = now;
         VoteCalledOn(_address, now);
         vote();
         members.voteExpressed(msg.sender);
         votedMembers++;
         
-        if(votedMembers > allMembers.div(2)){
-            members.addMember(_address);
-            allMembers++;
-            voteInProgress = false;
-            votedMembers = 0;
-        }
-        
-        if(now > votingStarted + 2 minutes){
-            voteInProgress = false;
-            votedMembers = 0;
-        }
     }
     
     function vote() public CanVote {
@@ -135,9 +130,19 @@ contract Members is Owned {
         members.voteExpressed(msg.sender);
         votedMembers++;
     }
-    
+    // The voted member has to manually reset his voting right. This provides additional functionality - the member is allowed to withdraw his vote if he changes his mind in the course of the voting. 
     function resetVote() public IsMember {
         members.voteReseted(msg.sender);
+    }
+    // The member, who called the vote is its administrator and decides when to stop it.
+    function stopVoteForNewMember(address _address) public CanStopVote {
+        if(votedMembers > allMembers.div(2)){
+            members.addMember(_address);
+            allMembers++;
+        }
+            
+            voteInProgress = false;
+            votedMembers = 0;
     }
     
     function donate() public payable IsMember {
@@ -151,11 +156,10 @@ contract Members is Owned {
         members.removeMember(_member);
     }
     
-    function removeMember(address _member) public {
+    function removeMemberByMember(address _member) public {
         require(!voteInProgress);
         require(_member != owner);
         require(members.membersData[_member].lastDonationTimeStamp + 1 hours < now);
         members.removeMember(_member);
     }
-    
 }
