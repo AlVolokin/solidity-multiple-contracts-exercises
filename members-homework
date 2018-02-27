@@ -1,5 +1,5 @@
 pragma solidity 0.4.20;
-// WIP
+
 contract Owned{
     address owner;
     
@@ -17,29 +17,15 @@ contract Owned{
     }
 }
 
-
 library SafeMath {
-    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
-        if (a == 0) {
-            return 0;
-        }
-        uint256 c = a * b;
-        assert(c / a == b);
-        return c;
-    }
     
     function div(uint256 a, uint256 b) internal pure returns (uint256) {
         assert(b > 0);
         uint256 c = a / b;
         assert(a == b * c + a % b); 
         return c;
-  }
-    
-    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
-        assert(b <= a);
-        return a - b;
     }
-    
+        
     function add(uint256 a, uint256 b) internal pure returns (uint256) {
         uint256 c = a + b;
         assert(c >= a);
@@ -49,70 +35,127 @@ library SafeMath {
 
 
 library MemberActions {
-    struct Member {
-        uint256 totalDonations;
-        uint256 lastDonationTimeStamp;
-        uint256 lastDonationAmount;
+    using SafeMath for uint256;
+    
+    struct MemberData {
         bool isMember;
         bool voted;
+        uint256 totalDonations;
+        uint256 lastDonationAmount;
+        uint256 lastDonationTimeStamp;
     }
     
+    struct MembersData { mapping(address => MemberData) membersData; }
     
+    function addMember(MembersData storage self, address _address) internal {
+       self.membersData[_address].isMember = true;
+    }
+    
+    function removeMember(MembersData storage self, address _address) internal {
+        self.membersData[_address].isMember = false;
+    }
+    
+    function voteExpressed(MembersData storage self, address _address) internal {
+        self.membersData[_address].voted = true;
+    }
+    
+    function voteReseted(MembersData storage self, address _address) internal {
+        self.membersData[_address].voted = false;
+    }
+    
+    function setTotalDonations(MembersData storage self, address _address, uint256 _lastDonation) internal {
+        self.membersData[_address].totalDonations.add(_lastDonation);
+    }
+    
+    function setLastDonationAmount(MembersData storage self, address _address, uint256 _lastDonation) internal {
+        self.membersData[_address].lastDonationAmount = _lastDonation;
+    }
+    
+    function setLastDonationTimeStamp(MembersData storage self, address _address) internal {
+        self.membersData[_address].lastDonationTimeStamp = now;
+    }
 }
 
 
 contract Members is Owned {
-    using MemberActions for MemberActions.Member;
+    using MemberActions for MemberActions.MemberData;
+    using MemberActions for MemberActions.MembersData;
     using SafeMath for uint256;
     
-    mapping(address => MemberActions.Member) members;
+    event VoteCalledOn(address _address, uint256 _timeStamp);
+    
+    MemberActions.MembersData members;
     uint256 allMembers;
     uint256 votedMembers;
-    bool voting = false;
+    bool voteInProgress = false;
     
     function Members() public {
-        members[owner].isMember = true;
+        members.addMember(owner);
         allMembers++;
     }
     
     modifier IsMember() {
-        require(members[msg.sender].isMember == true);
+        require(members.membersData[msg.sender].isMember == true);
         _;
     }
     
     modifier CanVote() {
-        require(members[msg.sender].voted == false);
+        require(members.membersData[msg.sender].voted == false);
         _;
     }
     
     modifier CanCallVote() {
-        require(!voting);
+        require(!voteInProgress);
         _;
     }
 
-    function addMember(address _address) public IsMember CanCallVote {
-        voting = true;
+    function callVoteForNewMember(address _address) public IsMember CanCallVote {
+        voteInProgress = true;
         uint256 votingStarted = now;
+        VoteCalledOn(_address, now);
         vote();
-        members[msg.sender].voted = true;
+        members.voteExpressed(msg.sender);
         votedMembers++;
         
         if(votedMembers > allMembers.div(2)){
-            members[_address].isMember = true;
+            members.addMember(_address);
             allMembers++;
+            voteInProgress = false;
+            votedMembers = 0;
         }
         
         if(now > votingStarted + 2 minutes){
-            voting = false;
+            voteInProgress = false;
+            votedMembers = 0;
         }
     }
     
-    function vote() public {
-        require(voting);
-        members[msg.sender].voted = true;
+    function vote() public CanVote {
+        require(voteInProgress);
+        members.voteExpressed(msg.sender);
         votedMembers++;
     }
     
-    // WIP
+    function resetVote() public IsMember {
+        members.voteReseted(msg.sender);
+    }
+    
+    function donate() public payable IsMember {
+        members.setTotalDonations(msg.sender, msg.value);
+        members.setLastDonationAmount(msg.sender, msg.value);
+        members.setLastDonationTimeStamp(msg.sender);
+    }
+    
+    function removeMemberByOwner(address _member) public OnlyOwner {
+        require(!voteInProgress);
+        members.removeMember(_member);
+    }
+    
+    function removeMember(address _member) public {
+        require(!voteInProgress);
+        require(_member != owner);
+        require(members.membersData[_member].lastDonationTimeStamp + 1 hours < now);
+        members.removeMember(_member);
+    }
     
 }
